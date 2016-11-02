@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<title>Web VR boilerplate</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, shrink-to-fit=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<style>
+body {
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  color: #fff;
+  margin: 0px;
+  padding: 0;
+  overflow: hidden;
+}
+</style>
+<script src='/google_analytics_auto.js'></script></head>
+
+<body>
+
+</body>
+
+<script>
+/*
+ * Debug parameters.
+ */
+WebVRConfig = {
+  /**
+   * webvr-polyfill configuration
+   */
+
+  // Forces availability of VR mode.
+  //FORCE_ENABLE_VR: true, // Default: false.
+  // Complementary filter coefficient. 0 for accelerometer, 1 for gyro.
+  //K_FILTER: 0.98, // Default: 0.98.
+  // How far into the future to predict during fast motion.
+  //PREDICTION_TIME_S: 0.040, // Default: 0.040 (in seconds).
+  // Flag to disable touch panner. In case you have your own touch controls
+  //TOUCH_PANNER_DISABLED: true, // Default: false.
+  // Enable yaw panning only, disabling roll and pitch. This can be useful for
+  // panoramas with nothing interesting above or below.
+  //YAW_ONLY: true, // Default: false.
+  // Enable the deprecated version of the API (navigator.getVRDevices).
+  //ENABLE_DEPRECATED_API: true, // Default: false.
+  // Scales the recommended buffer size reported by WebVR, which can improve
+  // performance. Making this very small can lower the effective resolution of
+  // your scene.
+  BUFFER_SCALE: 0.5, // default: 1.0
+  // Allow VRDisplay.submitFrame to change gl bindings, which is more
+  // efficient if the application code will re-bind it's resources on the
+  // next frame anyway.
+  // Dirty bindings include: gl.FRAMEBUFFER_BINDING, gl.CURRENT_PROGRAM,
+  // gl.ARRAY_BUFFER_BINDING, gl.ELEMENT_ARRAY_BUFFER_BINDING,
+  // and gl.TEXTURE_BINDING_2D for texture unit 0
+  // Warning: enabling this might lead to rendering issues.
+  //DIRTY_SUBMIT_FRAME_BINDINGS: true // default: false
+};
+</script>
+
+<!--
+  A polyfill for Promises. Needed for IE and Edge.
+  -->
+<script src="node_modules/es6-promise/dist/es6-promise.js"></script>
+
+<!--
+  three.js 3d library
+  -->
+<script src="node_modules/three/build/three.js"></script>
+<script src="node_modules/three/examples/js/utils/GeometryUtils.js"></script>
+
+<!--
+  VRControls.js acquires positional information from connected VR devices and applies the transformations to a three.js camera object.
+   -->
+<script src="node_modules/three/examples/js/controls/VRControls.js"></script>
+
+<!--
+  VREffect.js handles stereo camera setup and rendering.
+  -->
+<script src="node_modules/three/examples/js/effects/VREffect.js"></script>
+
+<!--
+  A polyfill for WebVR using the Device{Motion,Orientation}Event API.
+  -->
+<script src="node_modules/webvr-polyfill/build/webvr-polyfill.js"></script>
+
+<script src="jquery.js"></script>
+<script src="jquery-csv.js"></script>
+
+<script src="color-thief.js"></script>
+
+
+<!--
+  Helps enter and exit VR mode, provides best practices while in VR.
+  -->
+<script src="build/webvr-manager.js"></script>
+
+<script src="https://connect.soundcloud.com/sdk/sdk-3.1.2.js"></script>
+
+<script>
+
+//client_id=02gUJC0hH2ct1EGOcYXQIzRFU91c72Ea
+
+// Setup three.js WebGL renderer. Note: Antialiasing is a big performance hit.
+// Only enable it if you actually need to.
+var renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor( 0x000000 );
+
+// Append the canvas element created by the renderer to document body element.
+document.body.appendChild(renderer.domElement);
+
+// Create a three.js scene.
+var scene = new THREE.Scene();
+
+// Create a three.js camera.
+var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+
+
+var controls = new THREE.VRControls(camera);
+//controls.standing = true;
+//controls.standing = true;
+
+// Apply VR stereo rendering to renderer.
+var effect = new THREE.VREffect(renderer);
+effect.setSize(window.innerWidth, window.innerHeight);
+
+
+var raycast = new THREE.Raycaster();
+var fontLoader = new THREE.FontLoader();
+var songFont;
+fontLoader.load( 'node_modules/three/examples/fonts/helvetiker_bold.typeface.json', function ( response ) {
+  songFont = response;
+  loadTex();
+} );
+// Add a repeating grid as a skybox.
+var boxSize = 25;
+var loader = new THREE.TextureLoader();
+function loadTex() {
+  loader.load('https://i1.sndcdn.com/artworks-000132752379-ulanlg-large.jpg'.replace('-large', '-original'), onTextureLoaded); //img/box.png
+}
+
+function onTextureLoaded(texture) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 1);
+
+  var geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+  var material = new THREE.MeshBasicMaterial({
+  //  map: texture,
+    side: THREE.BackSide
+  });
+
+  // Align the skybox to the floor (which is at y=0).
+  skybox = new THREE.Mesh(geometry, material);
+  skybox.age = 1.0;
+ // skybox.position.y = boxSize/2;
+  skybox.immune = true;
+  scene.add(skybox);
+
+  // For high end VR devices like Vive and Oculus, take into account the stage
+  // parameters provided.
+  setupStage();
+}
+
+
+// Create a VR manager helper to enter and exit VR mode.
+var params = {
+  hideButton: false, // Default: false.
+  isUndistorted: false // Default: false.
+};
+var manager = new WebVRManager(renderer, effect, params);
+
+//////////
+var currentNode = null;
+var currentTracks;
+var currentArtist;
+
+var url = window.location.href;
+var artistLoc = url.indexOf("query");
+var arg = url.substr(artistLoc+6, artistLoc+25);
+
+var artist = arg;
+//alert(artist);
+
+  SC.initialize({
+    client_id: '02gUJC0hH2ct1EGOcYXQIzRFU91c72Ea',
+    //redirect_uri: 'http://example.com/callback'
+  });
+
+  SC.get('users/'+artist).then(function(artist) {
+    currentArtist = artist;
+  console.log(artist);
+  });
+
+  SC.get('users/'+ artist + '/tracks', {limit:200}).then(function(tracks) {
+    addTracks(tracks);
+    console.log(tracks);
+  });
+
+  var track_url = 'http://soundcloud.com/forss/flickermood';
+  SC.oEmbed(track_url, { auto_play: true }).then(function(oEmbed) {
+  console.log('oEmbed response: ', oEmbed);
+  });
+//////
+
+//var csvData = jQuery.csv.toArrays('spectral_embedded_data.csv');
+
+$.get('sparser_embedding.csv', function(data) {
+    csvData = data;
+    csvData = $.csv.toArrays(csvData);
+   // alert(parseInt(csvData[4][1]).toString());
+  //  addTracksFromCSV(csvData);
+    //alert(csvData[0]);
+});
+
+function addTracksFromCSV(data) {
+  for (var i = 1; i < 1000/*data.length*/; i++ ) {
+
+    //if (currentTracks[i].playback_count > 400) {
+      var geo = new THREE.SphereBufferGeometry( 0.001*Math.pow(50000, 0.33333), 32, 32 );
+      var mat = new THREE.MeshStandardMaterial({color: 0x00ff00, metalness: 0.5, roughness: 0.5});
+      var mesh = new THREE.Mesh( geo, mat );
+      mesh.scale.set(0.001,0.001,0.001);
+      mesh.trackName = 'test';//currentTracks[i].title;
+      mesh.trackID = parseInt(data[i][1]).toString();
+      mesh.artworkURL = null;//'currentTracks[i].artwork_url';
+      mesh.age = 0.0;
+      mesh.position.x = data[i][3]*800;//3*Math.random() - 1.5;
+      mesh.position.y = data[i][2]*700;//3*Math.random() - 1.5;
+      mesh.position.z = data[i][4]*500;//3*Math.random() - 1.5;
+    //  console.log(mesh.position);
+      scene.add(mesh);
+  //  }
+
+  }
+}
+
+
+function addTracks(currentTracks) {
+
+  for (var i = 0; i < currentTracks.length; i++ ) {
+    if (currentTracks[i].playback_count > 400) {
+      var geo = new THREE.SphereBufferGeometry( 0.001*Math.pow(currentTracks[i].playback_count, 0.33333), 32, 32 );
+      var mat = new THREE.MeshStandardMaterial({color:fresh, metalness: 0.5, roughness: 0.5});
+      var mesh = new THREE.Mesh( geo, mat );
+      mesh.scale.set(0.001,0.001,0.001);
+      mesh.trackName = currentTracks[i].title;
+      mesh.trackID = currentTracks[i].id;
+      mesh.artworkURL = currentTracks[i].artwork_url;
+      mesh.age = 0.0;
+      mesh.position.x = 3*Math.random() - 1.5;
+      mesh.position.y = 3*Math.random() - 1.5;
+      mesh.position.z = 3*Math.random() - 1.5;
+    //  console.log(mesh.position);
+      scene.add(mesh);
+    }
+
+  }
+  
+}
+
+var light = new THREE.HemisphereLight( 0xffffcc, 0xa86560, 3 );
+scene.add( light );
+var pointLight = new THREE.PointLight( 0xffffff, 1, 100 );
+//camera.add(pointLight);
+scene.add(camera);
+
+var fresh = new THREE.Color( 0x222222);
+var used = new THREE.Color( 0x555555);
+var playing = new THREE.Color( 0xeeeeee);
+
+// Create 3D objects.
+var geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+var material = new THREE.MeshNormalMaterial();
+var cube = new THREE.Mesh(geometry, material);
+
+// Position cube mesh to be right in front of you.
+//cube.position.set(0, controls.userHeight, -1);
+
+// Add cube mesh to your three.js scene
+//scene.add(cube);
+
+console.log(controls);
+
+window.addEventListener('resize', onResize, true);
+window.addEventListener('vrdisplaypresentchange', onResize, true);
+window.addEventListener('click', onClick);
+window.addEventListener('mousemove', onMove);
+
+// Request animation frame loop function
+var lastRender = 0;
+
+var mouse = new THREE.Vector2();
+
+function onMove( event ) {
+
+  mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+  mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;   
+
+}
+
+function onClick( event ) {
+
+  // calculate mouse position in normalized device coordinates
+  // (-1 to +1) for both components
+  mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+  mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;   
+//  console.log(scene.children);
+  raycast.setFromCamera( mouse, camera ); 
+  var intersects = raycast.intersectObjects( scene.children );
+
+  //console.log(intersects);
+
+  if (!intersects[ 0 ].object.immune) {
+    if (currentNode != null) {
+      currentNode.material.color = used;
+    }
+    currentNode = intersects[ 0 ].object;
+    currentNode.material.color = playing;
+    currentNode.scale.set(1.5, 1.2, 1.5);
+
+    if (currentNode.artworkURL != null) {
+    //  SC.get('tracks/'+ currentNode.trackID).then(function(track) {
+     //   currentNode.artworkURL = track.artwork_url;
+      //  console.log(tracks);
+    //  });
+     // currentNode.artworkURL = 
+  //  }
+    loader.load(currentNode.artworkURL.replace('-large', '-original'), function(texture) {
+        var img = texture.image;
+        var colorThief = new ColorThief();
+        color = colorThief.getColor(img);
+        color = new THREE.Color(color[0]/256, color[1]/256, color[2]/256);
+        console.log(color);
+        fresh = color;
+        playing = new THREE.Color(1-color.r, 1-color.g, 1-color.b);
+        used = new THREE.Color(color.r*0.6, color.g*0.6, color.b*0.6);
+        updateColors();
+
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(-1, 1);
+        skybox.material.map = texture;
+        skybox.material.needsUpdate = true;
+    });
+  }
+
+    SC.stream('/tracks/' + intersects[0].object.trackID).then(function(player){
+
+      player.play();
+    });
+
+   // console.log(intersects[0].object.)
+  }
+
+}
+
+function updateColors() {
+  console.log(scene.children[0]);
+  for (var i = 0; i < scene.children.length; i++) {
+    var currentNode = scene.children[i];
+      if (currentNode.trackID != null) {
+        currentNode.material.color = fresh;
+       }
+  }
+}
+
+
+function animate(timestamp) {
+  var delta = Math.min(timestamp - lastRender, 500);
+  lastRender = timestamp;
+
+  // Apply rotation to cube mesh
+ // cube.rotation.y += delta * 0.0006;
+
+  for (var i = 0; i < scene.children.length; i++ ) {
+    var currentNode = scene.children[i];
+    currentNode.scale.x += 0.1*(1 - currentNode.scale.x);
+    currentNode.scale.y += 0.1*(1 - currentNode.scale.y);
+    currentNode.scale.z += 0.1*(1 - currentNode.scale.z);
+    currentNode.age += 0.04;
+    if (currentNode.trackID != null) {
+      var distance = camera.position.clone().sub(currentNode.position).length();
+      
+      if (distance < 0.5) {
+        currentNode.material.transparent = true;
+        currentNode.material.opacity = (distance-0.5)*4.0+1.0;
+        if (!!currentNode.children[0]) {
+          currentNode.children[0].material.opacity = (distance-0.5)*4.0+1.0;
+         currentNode.children[0].material.transparent = true;
+         // currentNode.children[0].children[0].material.opacity = (distance-0.5)*4.0+1.0;
+        }
+      } else {
+      currentNode.material.transparent = false;
+      //if (!!currentNode.children[0]) currentNode.children[0].children[0].material.transparent = false;
+    
+    }
+      if (distance < 1.75) {
+          if (currentNode.children.length == 0) {
+          //  var planeBuffGeo = new THREE.PlaneBufferGeometry(0.026*Math.pow(currentNode.trackName.length, 0.85), 0.05, 1, 1);
+          //  var planeMat = new THREE.MeshStandardMaterial({color:0x559999, transparent:true, opacity:0.5});
+         //   var planeMesh = new THREE.Mesh(planeBuffGeo, planeMat);
+            var textGeo = new THREE.TextGeometry( currentNode.trackName, {
+              font: songFont,
+              size: 0.02,
+              height: 0.01,
+              curveSegments: 3,
+              bevelThickness: 0.0005,
+              bevelSize: 0.0005,
+              bevelEnabled: 0,
+              material: 0,
+              extrudeMaterial: 0.1
+          });
+          textGeo.computeBoundingSphere();
+          var textMesh = new THREE.Mesh(textGeo, new THREE.MeshStandardMaterial({color: 0xeeeeee}));
+        //  console.log(currentNode.geometry);
+         // planeMesh.add(textMesh);
+          textMesh.position.set( -textMesh.geometry.boundingSphere.radius, -0.008 + currentNode.geometry.boundingSphere.radius * 1.45, 0.0);
+         // planeMesh.position.y = ;
+
+          currentNode.add(textMesh);
+        } else {
+          currentNode.children[0].visible = true;
+        }
+      } else if (distance > 2.75 && currentNode.children.length > 0) {
+        currentNode.children[0].visible = false;
+      }
+      currentNode.lookAt(camera.position);
+    }
+  }
+
+  raycast.setFromCamera( mouse, camera ); 
+  var intersects = raycast.intersectObjects( scene.children );
+  if (!intersects[ 0 ].object.immune) {
+    currentNode = intersects[ 0 ].object;
+    currentNode.scale.x *= 1.016;
+    currentNode.scale.y *= 1.012;
+    currentNode.scale.z *= 1.016;
+  }
+
+  // Move forward
+  var dir = camera.getWorldDirection();
+  camera.position.x += 0.001 * dir.x;
+  camera.position.y += 0.001 * dir.y;
+  camera.position.z += 0.001 * dir.z;
+
+  controls.update();
+  
+  // Render the scene through the manager.
+  manager.render(scene, camera, timestamp);
+  effect.render(scene, camera);
+
+
+
+  vrDisplay.requestAnimationFrame(animate);
+}
+
+function onResize(e) {
+  effect.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+
+var vrDisplay;
+
+// Get the HMD, and if we're dealing with something that specifies
+// stageParameters, rearrange the scene.
+function setupStage() {
+  navigator.getVRDisplays().then(function(displays) {
+    if (displays.length > 0) {
+      vrDisplay = displays[0];
+      if (vrDisplay.stageParameters) {
+        setStageDimensions(vrDisplay.stageParameters);
+      }
+      vrDisplay.requestAnimationFrame(animate);
+    }
+  });
+}
+
+function setStageDimensions(stage) {
+  // Make the skybox fit the stage.
+  var material = skybox.material;
+  scene.remove(skybox);
+
+  // Size the skybox according to the size of the actual stage.
+  var geometry = new THREE.BoxGeometry(stage.sizeX, boxSize, stage.sizeZ);
+  skybox = new THREE.Mesh(geometry, material);
+
+  // Place it on the floor.
+//  skybox.position.y = boxSize/2;
+  scene.add(skybox);
+
+  // Place the cube in the middle of the scene, at user height.
+ // cube.position.set(0, controls.userHeight, 0);
+}
+
+</script>
+
+</html>
