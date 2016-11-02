@@ -94,6 +94,11 @@ WebVRConfig = {
 <script src="color-thief.js"></script>
 
 
+<script src="models/DDSLoader.js"></script>
+<script src="models/MTLLoader.js"></script>
+<script src="models/OBJLoader.js"></script>
+
+
 <!--
   Helps enter and exit VR mode, provides best practices while in VR.
   -->
@@ -280,10 +285,34 @@ var geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
 var material = new THREE.MeshNormalMaterial();
 var cube = new THREE.Mesh(geometry, material);
 */
-var pointerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-var pointerMat = new THREE.MeshStandardMaterial({color:0xee3399}); 
-var pointerMesh = new THREE.Mesh(pointerGeo, pointerMat);
-scene.add(pointerMesh);
+//var pointerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+//var pointerMat = new THREE.MeshStandardMaterial({color:0xee3399}); 
+var pointerMesh;// = new THREE.Mesh(pointerGeo, pointerMat);
+//scene.add(pointerMesh);
+
+// Load Pointer Model
+var onProgress = function ( xhr ) {
+  if ( xhr.lengthComputable ) {
+    var percentComplete = xhr.loaded / xhr.total * 100;
+    console.log( Math.round(percentComplete, 2) + '% downloaded' );
+  }
+};
+var onError = function ( xhr ) { };
+THREE.Loader.Handlers.add( /\.dds$/i, new THREE.DDSLoader() );
+var mtlLoader = new THREE.MTLLoader();
+mtlLoader.setPath( 'models/' );
+mtlLoader.load( 'body.mtl', function( materials ) {
+  materials.preload();
+  var objLoader = new THREE.OBJLoader();
+  objLoader.setMaterials( materials );
+  objLoader.setPath( 'models/' );
+  objLoader.load( 'body.obj', function ( object ) {
+   // object.position.y = - 95;
+    pointerMesh = object;
+    scene.add( pointerMesh );
+  }, onProgress, onError );
+});
+
 console.log(navigator.getGamepads());
 
 // Position cube mesh to be right in front of you.
@@ -376,7 +405,7 @@ function updateColors() {
   for (var i = 0; i < scene.children.length; i++) {
     var currentNode = scene.children[i];
       if (currentNode.trackID != null) {
-        currentNode.material.color = fresh;
+   //     currentNode.material.color = fresh;
        }
   }
 }
@@ -469,12 +498,14 @@ function animate(timestamp) {
     }
   }
 
-  var padOnePose = vrGamepads[0].pose;
-  pointerMesh.position.x = padOnePose.position[0];
-  pointerMesh.position.y = padOnePose.position[1];
-  pointerMesh.position.z = padOnePose.position[2];
-  pointerMesh.quaternion.set( padOnePose.orientation[0], padOnePose.orientation[1], padOnePose.orientation[2], padOnePose.orientation[3] );
-
+  if (vrGamepads[0].pose) {
+    var padOnePose = vrGamepads[0].pose;
+    pointerMesh.position.x = padOnePose.position[0];
+    pointerMesh.position.y = padOnePose.position[1];
+    pointerMesh.position.z = padOnePose.position[2];
+    pointerMesh.quaternion.set( padOnePose.orientation[0], padOnePose.orientation[1], padOnePose.orientation[2], padOnePose.orientation[3] );
+  }
+  
   // Make node buldge
   raycast.setFromCamera( mouse, camera ); 
   var intersects = raycast.intersectObjects( scene.children );
