@@ -316,46 +316,50 @@ function onClick( event ) {
 
   //console.log(intersects);
 
-  if (!intersects[ 0 ].object.immune) {
-    if (currentNode != null) {
-      currentNode.material.color = used;
+  if (intersects[0]) {
+
+    if (!intersects[ 0 ].object.immune) {
+      if (currentNode != null) {
+        currentNode.material.color = used;
+      }
+      currentNode = intersects[ 0 ].object;
+      currentNode.material.color = playing;
+      currentNode.scale.set(1.5, 1.2, 1.5);
+
+      if (currentNode.artworkURL != null) {
+      //  SC.get('tracks/'+ currentNode.trackID).then(function(track) {
+       //   currentNode.artworkURL = track.artwork_url;
+        //  console.log(tracks);
+      //  });
+       // currentNode.artworkURL = 
+    //  }
+      loader.load(currentNode.artworkURL.replace('-large', '-original'), function(texture) {
+          var img = texture.image;
+          var colorThief = new ColorThief();
+          color = colorThief.getColor(img);
+          color = new THREE.Color(color[0]/256, color[1]/256, color[2]/256);
+          console.log(color);
+          fresh = color;
+          playing = new THREE.Color(1-color.r, 1-color.g, 1-color.b);
+          used = new THREE.Color(color.r*0.6, color.g*0.6, color.b*0.6);
+          updateColors();
+
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          texture.repeat.set(-1, 1);
+          skybox.material.map = texture;
+          skybox.material.needsUpdate = true;
+      });
     }
-    currentNode = intersects[ 0 ].object;
-    currentNode.material.color = playing;
-    currentNode.scale.set(1.5, 1.2, 1.5);
 
-    if (currentNode.artworkURL != null) {
-    //  SC.get('tracks/'+ currentNode.trackID).then(function(track) {
-     //   currentNode.artworkURL = track.artwork_url;
-      //  console.log(tracks);
-    //  });
-     // currentNode.artworkURL = 
-  //  }
-    loader.load(currentNode.artworkURL.replace('-large', '-original'), function(texture) {
-        var img = texture.image;
-        var colorThief = new ColorThief();
-        color = colorThief.getColor(img);
-        color = new THREE.Color(color[0]/256, color[1]/256, color[2]/256);
-        console.log(color);
-        fresh = color;
-        playing = new THREE.Color(1-color.r, 1-color.g, 1-color.b);
-        used = new THREE.Color(color.r*0.6, color.g*0.6, color.b*0.6);
-        updateColors();
+      SC.stream('/tracks/' + intersects[0].object.trackID).then(function(player){
 
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(-1, 1);
-        skybox.material.map = texture;
-        skybox.material.needsUpdate = true;
-    });
-  }
+        player.play();
+      });
 
-    SC.stream('/tracks/' + intersects[0].object.trackID).then(function(player){
+     // console.log(intersects[0].object.)
+    }
 
-      player.play();
-    });
-
-   // console.log(intersects[0].object.)
   }
 
 }
