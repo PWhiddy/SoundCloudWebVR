@@ -498,12 +498,25 @@ function animate(timestamp) {
     }
   }
 
-  if ( vrGamepads.length > 0 && vrGamepads[0].pose) {
+  if ( vrGamepads.length > 0 && vrGamepads[0].pose && vrGamepads[0].pose.position) {
     var padOnePose = vrGamepads[0].pose;
     pointerMesh.position.x = padOnePose.position[0];
     pointerMesh.position.y = padOnePose.position[1];
     pointerMesh.position.z = padOnePose.position[2];
+
     pointerMesh.quaternion.set( padOnePose.orientation[0], padOnePose.orientation[1], padOnePose.orientation[2], padOnePose.orientation[3] );
+
+    var controllerPosition = new THREE.Vector3( padOnePose.position[0], padOnePose.position[1], padOnePose.position[2] );
+    for (var i = 1; i < scene.children.length; i++ ) {
+      var currentNode = scene.children[i];
+      if (currentNode.trackID != null) {
+        var controllerDistance = currentNode.position.clone().sub( controllerPosition ).length();
+        if (Math.abs(controllerDistance - currentNode.geometry.radius) < 0.1 ) {
+          vrGamepads[0].hapticActuators[0].pulse( 50, 10);
+        }
+      }
+    }
+
   }
   
   // Make node buldge
