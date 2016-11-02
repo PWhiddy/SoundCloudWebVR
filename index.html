@@ -511,7 +511,7 @@ function animate(timestamp) {
       var currentNode = scene.children[i];
       if (currentNode.trackID != null) {
         var controllerDistance = currentNode.position.clone().sub( controllerPosition ).length();
-        if (Math.abs(controllerDistance - currentNode.geometry.radius) < 0.1 ) {
+        if (Math.abs(controllerDistance - currentNode.geometry.radius) < 1.1 ) {
           vrGamepads[0].hapticActuators[0].pulse( 50, 10);
         }
       }
