@@ -440,11 +440,13 @@ function animate(timestamp) {
 
   raycast.setFromCamera( mouse, camera ); 
   var intersects = raycast.intersectObjects( scene.children );
-  if (!intersects[ 0 ].object.immune) {
-    currentNode = intersects[ 0 ].object;
-    currentNode.scale.x *= 1.016;
-    currentNode.scale.y *= 1.012;
-    currentNode.scale.z *= 1.016;
+  if (intersects[ 0 ]) {
+    if (!intersects[ 0 ].object.immune) {
+      currentNode = intersects[ 0 ].object;
+      currentNode.scale.x *= 1.016;
+      currentNode.scale.y *= 1.012;
+      currentNode.scale.z *= 1.016;
+    }
   }
 
   // Move forward
