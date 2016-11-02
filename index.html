@@ -138,7 +138,7 @@ fontLoader.load( 'node_modules/three/examples/fonts/helvetiker_bold.typeface.jso
   loadTex();
 } );
 // Add a repeating grid as a skybox.
-var boxSize = 25;
+var boxSize = 8;
 var loader = new THREE.TextureLoader();
 function loadTex() {
   loader.load('https://i1.sndcdn.com/artworks-000132752379-ulanlg-large.jpg'.replace('-large', '-original'), onTextureLoaded); //img/box.png
@@ -275,9 +275,16 @@ var used = new THREE.Color( 0x555555);
 var playing = new THREE.Color( 0xeeeeee);
 
 // Create 3D objects.
+/*
 var geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
 var material = new THREE.MeshNormalMaterial();
 var cube = new THREE.Mesh(geometry, material);
+*/
+var pointerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+var pointerMat = new THREE.MeshStandardMaterial({color:0xee3399}); 
+var pointerMesh = new THREE.Mesh(pointerGeo, pointerMat);
+scene.add(pointerMesh);
+console.log(navigator.getGamepads());
 
 // Position cube mesh to be right in front of you.
 //cube.position.set(0, controls.userHeight, -1);
@@ -379,8 +386,7 @@ function animate(timestamp) {
   var delta = Math.min(timestamp - lastRender, 500);
   lastRender = timestamp;
 
-  // Apply rotation to cube mesh
- // cube.rotation.y += delta * 0.0006;
+  //// Check all nodes to see if they need text //// 
 
   for (var i = 0; i < scene.children.length; i++ ) {
     var currentNode = scene.children[i];
@@ -438,6 +444,38 @@ function animate(timestamp) {
     }
   }
 
+  // Get gamepad input
+  var vrGamepads = [];
+
+  var gamepads = navigator.getGamepads();
+  for (var i = 0; i < gamepads.length; ++i) {
+    var gamepad = gamepads[i];
+    // The array may contain undefined gamepads, so check for that as
+    // well as a non-null pose.
+    if (gamepad) {
+      if (gamepad.pose)
+        vrGamepads.push(gamepad);
+
+      if ("hapticActuators" in gamepad && gamepad.hapticActuators.length > 0) {
+        for (var j = 0; j < gamepad.buttons.length; ++j) {
+          if (gamepad.buttons[j].pressed) {
+            // Vibrate the gamepad using to the value of the button as
+            // the vibration intensity.
+            gamepad.hapticActuators[0].pulse(gamepad.buttons[j].value, 20);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  var padOnePose = vrGamepads[0].pose;
+  pointerMesh.position.x = padOnePose.position[0];
+  pointerMesh.position.y = padOnePose.position[1];
+  pointerMesh.position.z = padOnePose.position[2];
+  pointerMesh.quaternion.set( padOnePose.orientation[0], padOnePose.orientation[1], padOnePose.orientation[2], padOnePose.orientation[3] );
+
+  // Make node buldge
   raycast.setFromCamera( mouse, camera ); 
   var intersects = raycast.intersectObjects( scene.children );
   if (intersects[ 0 ]) {
@@ -490,16 +528,16 @@ function setupStage() {
 
 function setStageDimensions(stage) {
   // Make the skybox fit the stage.
-  var material = skybox.material;
-  scene.remove(skybox);
+ // var material = skybox.material;
+//  scene.remove(skybox);
 
   // Size the skybox according to the size of the actual stage.
-  var geometry = new THREE.BoxGeometry(stage.sizeX, boxSize, stage.sizeZ);
-  skybox = new THREE.Mesh(geometry, material);
+//  var geometry = new THREE.BoxGeometry(stage.sizeX, boxSize, stage.sizeZ);
+//  skybox = new THREE.Mesh(geometry, material);
 
   // Place it on the floor.
 //  skybox.position.y = boxSize/2;
-  scene.add(skybox);
+//  scene.add(skybox);
 
   // Place the cube in the middle of the scene, at user height.
  // cube.position.set(0, controls.userHeight, 0);
