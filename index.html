@@ -405,7 +405,7 @@ function updateColors() {
   for (var i = 0; i < scene.children.length; i++) {
     var currentNode = scene.children[i];
       if (currentNode.trackID != null) {
-   //     currentNode.material.color = fresh;
+        currentNode.material.color = fresh;
        }
   }
 }
@@ -498,7 +498,7 @@ function animate(timestamp) {
     }
   }
 
-  if (vrGamepads[0].pose) {
+  if ( vrGamepads.length > 0 && vrGamepads[0].pose) {
     var padOnePose = vrGamepads[0].pose;
     pointerMesh.position.x = padOnePose.position[0];
     pointerMesh.position.y = padOnePose.position[1];
