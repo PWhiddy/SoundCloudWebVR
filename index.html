@@ -182,6 +182,8 @@ var manager = new WebVRManager(renderer, effect, params);
 
 //////////
 var currentNode = null;
+var controllerInNode = false;
+var outsideNodeCount = 5;
 var currentTracks;
 var currentArtist;
 
@@ -498,6 +500,7 @@ function animate(timestamp) {
     }
   }
 
+
   if ( vrGamepads.length > 0 && vrGamepads[0].pose && vrGamepads[0].pose.position) {
     var padOnePose = vrGamepads[0].pose;
     pointerMesh.position.x = padOnePose.position[0];
@@ -506,13 +509,54 @@ function animate(timestamp) {
 
     pointerMesh.quaternion.set( padOnePose.orientation[0], padOnePose.orientation[1], padOnePose.orientation[2], padOnePose.orientation[3] );
 
+    var minDist = 100000;
     var controllerPosition = new THREE.Vector3( padOnePose.position[0], padOnePose.position[1], padOnePose.position[2] );
     for (var i = 1; i < scene.children.length; i++ ) {
       var currentNode = scene.children[i];
       if (currentNode.trackID != null) {
         var controllerDistance = currentNode.position.clone().sub( controllerPosition ).length();
-        if (Math.abs(controllerDistance - currentNode.geometry.radius) < 1.1 ) {
-          vrGamepads[0].hapticActuators[0].pulse( 50, 10);
+        if (controllerDistance < minDist) {
+          minDist = controllerDistance;
+          console.log(controllerDistance - currentNode.geometry.boundingSphere.radius);
+        }
+        if ( controllerDistance - currentNode.geometry.boundingSphere.radius < 0.0 ) {
+          currentNode.scale.x *= 1.016;
+          currentNode.scale.y *= 1.012;
+          currentNode.scale.z *= 1.016;
+          if ( !controllerInNode && outsideNodeCount == 0 ) {
+
+            if (currentNode.artworkURL != null) {
+
+              loader.load(currentNode.artworkURL.replace('-large', '-original'), function(texture) {
+                var img = texture.image;
+                var colorThief = new ColorThief();
+                color = colorThief.getColor(img);
+                color = new THREE.Color(color[0]/256, color[1]/256, color[2]/256);
+                console.log(color);
+                fresh = color;
+                playing = new THREE.Color(1-color.r, 1-color.g, 1-color.b);
+                used = new THREE.Color(color.r*0.6, color.g*0.6, color.b*0.6);
+                updateColors();
+
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(-1, 1);
+                skybox.material.map = texture;
+                skybox.material.needsUpdate = true;
+              });
+            }
+
+            SC.stream('/tracks/' + currentNode.trackID).then(function(player){
+              player.play();
+            });
+
+            vrGamepads[0].hapticActuators[0].pulse( 100, 20);
+          }
+          controllerInNode = true;
+          outsideNodeCount++;
+        } else {
+          controllerInNode = false;
+          outsideNodeCount = 0;
         }
       }
     }
